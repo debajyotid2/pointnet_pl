@@ -20,7 +20,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 class DownloadProgressBar(tqdm):
     """Progress bar to be displayed while downloading data from a URL"""
-    def update_to(self, b: int = 1, bsize: int = 1, tsize: int = None) -> None:
+    def update_to(self, b: int = 1, bsize: int = 1, tsize: Optional[int] = None) -> None:
         if tsize is not None:
             self.total = tsize
         self.update(b * bsize - self.n)
@@ -34,7 +34,7 @@ class ModelNet10(Dataset):
                  transform: Optional[Callable[[np.ndarray[Any, Any] | torch.Tensor], torch.Tensor]] = None,
                  target_transform: Optional[Callable[[np.ndarray[Any, Any] | torch.Tensor], torch.Tensor]] = None,
                  sample: Optional[bool] = True,
-                 num_samples: Optional[int] = 1024) -> None:
+                 num_samples: int = 1024) -> None:
         super().__init__()
 
         self.train = train
@@ -62,7 +62,7 @@ class ModelNet10(Dataset):
         with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]) as bar:
             request.urlretrieve(url, filename=output_path, reporthook=bar.update_to)
 
-    def _extract_zip(self, zipfile_path: Path, data_dirpath: Path = None) -> Path:
+    def _extract_zip(self, zipfile_path: Path, data_dirpath: Optional[Path] = None) -> Path:
         """Extracts contents of a zip file given a zip file path, and returns path to extracted location."""
         if data_dirpath is None:
             data_dirpath = zipfile_path.resolve().with_name(zipfile_path.stem)
@@ -83,8 +83,8 @@ class ModelNet10(Dataset):
         data_dirpath = data_dirpath / dataset_name
         pathlist = [list(class_dir.glob(subset)) for class_dir in data_dirpath.iterdir() if class_dir.is_dir()]
         filelist = [list(path[0].glob("*.off")) for path in pathlist]
-        filelist = [file for files in filelist for file in files]
-        return random.sample(filelist, k=len(filelist))
+        list_of_files = [file for files in filelist for file in files]
+        return random.sample(list_of_files, k=len(list_of_files))
    
     def _generate_class_name_dict(self) -> dict[str, int]:
         """Generates dictionary containing class name to integer mappings"""
@@ -103,7 +103,8 @@ class ModelNet10(Dataset):
             len_b = np.linalg.norm(vert2 - vert3)
             len_c = np.linalg.norm(vert3 - vert1)
             half_sum = 0.5 * (len_a + len_b + len_c)
-            return max(half_sum * (half_sum - len_a) * (half_sum - len_b) * (half_sum - len_c), 0) ** 0.5
+            area = half_sum * (half_sum - len_a) * (half_sum - len_b) * (half_sum - len_c)
+            return max(area, 0) ** 0.5
 
         def _sample_from_face(
                            vert1: np.ndarray[Any, Any],
@@ -123,7 +124,7 @@ class ModelNet10(Dataset):
         area_calc_func = lambda face: _calc_triangle_area(verts[face[0]], verts[face[1]], verts[face[2]])
         sampling_func = lambda face: _sample_from_face(verts[face[0]], verts[face[1]], verts[face[2]])
 
-        areas = np.asarray(list(map(area_calc_func, faces)), dtype=np.float32)
+        areas = list(map(area_calc_func, faces))
         sampled_faces = (random.choices(faces, weights=areas, cum_weights=None, k=self.num_samples))
         
         sampled_points = np.asarray(list(map(sampling_func, sampled_faces)), dtype=np.float32)
@@ -133,12 +134,12 @@ class ModelNet10(Dataset):
     def __getitem__(self, idx: int | list[int] | torch.Tensor) -> torch.Tensor:
         def parse_off_points(off_filepath: Path) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
             """Parses 3-D coordinates and points in triangular faces from an OFF (Object File Format) file into numpy arrays."""
-            def parse_single_point(line: str) -> tuple[float]:
+            def parse_single_point(line: str) -> tuple[float, float, float]:
                 """Parse coordinates of a single vertex from a line of the OFF file."""
                 coords = line.strip().split(" ")
                 return (float(coords[0]), float(coords[1]), float(coords[2]))
             
-            def parse_single_face(line: str) -> tuple[int]:
+            def parse_single_face(line: str) -> tuple[int, int, int]:
                 """Parse vertice of a single face from a line of the OFF file."""
                 points = line.strip().split(" ")
                 return (int(points[0]), int(points[1]), int(points[2]))
@@ -146,8 +147,8 @@ class ModelNet10(Dataset):
             with open(off_filepath, "r") as file:
                 if file.readline().strip() != "OFF":
                     raise RuntimeError(f"File {off_filepath} is not a valid OFF file.")
-                n_verts, n_faces = file.readline().strip().split(" ")[:2]
-                n_verts, n_faces = int(n_verts), int(n_faces)
+                n_verts_str, n_faces_str = file.readline().strip().split(" ")[:2]
+                n_verts, n_faces = int(n_verts_str), int(n_faces_str)
                 return np.asarray(list(map(
                     parse_single_point, [file.readline() for _ in range(n_verts)])), dtype=np.float32), \
                         np.asarray(list(map(

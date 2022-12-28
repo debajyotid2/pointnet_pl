@@ -1,0 +1,20 @@
+beta1: 0.9
+beta2: 0.999
+dropout_p: 0.7
+feature_mlp_out_ftrs:
+- 64
+- 128
+- 1024
+global_feature_mlp_out_ftrs:
+- 64
+- 128
+- 1024
+input_shape: !!python/object/apply:torch.Size
+- !!python/tuple
+  - 1024
+  - 3
+learning_rate: 0.001
+num_classes: 10
+regularization_weight: 0.0001
+scheduler_gamma: 0.5
+scheduler_stepsize: 20

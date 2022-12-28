@@ -152,7 +152,7 @@ class PointNetClassifier(pl.LightningModule):
         preds, t_net_out_3by3, t_net_out_64by64 = self.forward(points)
         accuracy = self.get_accuracy(preds, targets)
         self.log("test_acc", accuracy)
-        return loss, accuracy
+        return accuracy
 
     def get_accuracy(self, logits: torch.Tensor, targets: torch.Tensor) -> float:
         """Calculates accuracy given logits and targets."""
@@ -162,18 +162,10 @@ class PointNetClassifier(pl.LightningModule):
         return accuracy
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        optimizer = torch.optim.Adam(params = self.parameters()
-                # dict(params=self.input_transform.parameters()),
-                # dict(params=self.input_feature_mlp.parameters()),
-                # dict(params=self.feature_transform.parameters()),
-                # dict(params=self.feature_mlp.parameters()),
-                # dict(params=self.maxpool.parameters()),
-                # dict(params=self.flatten.parameters()),
-                # dict(params=self.global_feature_mlp.parameters())
-            ,
-            lr=self.hparams.learning_rate,
-            betas=(self.hparams.beta1, self.hparams.beta2)
-        )
+        optimizer = torch.optim.Adam(params = self.parameters(),
+                                    lr=self.hparams.learning_rate,
+                                    betas=(self.hparams.beta1, self.hparams.beta2)
+                                )
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.hparams.scheduler_stepsize, gamma=self.hparams.scheduler_gamma)
         return [optimizer], [scheduler]
 

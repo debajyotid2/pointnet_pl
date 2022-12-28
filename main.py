@@ -13,16 +13,18 @@ BETA2 = 0.999
 DROPOUT_P = 0.7
 BATCH_SIZE = 32
 TEST_BATCH_SIZE = 128
-MAX_EPOCHS = 20
+MAX_EPOCHS = 300
 
-PL_WORKING_DIR = Path("./lightning_logs")
+PL_WORKING_DIR = Path(".").resolve()
 CKPT_PATH = None
 
 def main() -> None:
     train_ds, val_ds = load_training_and_validation_data(batch_size=BATCH_SIZE)
     test_ds = load_test_data(batch_size=TEST_BATCH_SIZE)
-
-    ckpt_path = Path(CKPT_PATH)
+        
+    ckpt_path = CKPT_PATH
+    if ckpt_path is not None:
+        ckpt_path = Path(CKPT_PATH) 
 
     input_shape = next(iter(train_ds))[0].shape[1:]
     
@@ -48,7 +50,7 @@ def main() -> None:
                          devices=1,
                          max_epochs=MAX_EPOCHS,
                          callbacks=[checkpoint_callback])
-    if ckpt_path.exists():
+    if ckpt_path is not None:
         trainer.fit(classifier, 
                 train_dataloaders=train_ds, 
                 val_dataloaders=val_ds, 
