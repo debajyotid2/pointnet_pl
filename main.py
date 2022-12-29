@@ -1,10 +1,16 @@
+import random
+
 from pathlib import Path
+
+import numpy as np
 import pytorch_lightning as pl
 import torch
+
 from src.model import TransformationNetwork, PointNetClassifier, PointNetClassifierNoTransforms
 from src.dataset import load_training_and_validation_data, load_test_data
 
-NUM_CLASSES = 10
+DATASET = "ModelNet40"
+NUM_CLASSES = 40
 FEATURE_MLP_OUT_FTRS = [64, 128, 1024]
 GLOBAL_FEATURE_MLP_OUT_FTRS = [64, 128, 1024]
 LEARNING_RATE = 1e-3
@@ -13,19 +19,26 @@ BETA2 = 0.999
 DROPOUT_P = 0.7
 BATCH_SIZE = 32
 TEST_BATCH_SIZE = 128
-MAX_EPOCHS = 300
-TRANSFORMS = False
+MAX_EPOCHS = 1
+TRANSFORMS = True
+SEED = 42
+AUGMENT = True
 
 PL_WORKING_DIR = Path(".").resolve()
 CKPT_PATH = None
 
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+
 def main() -> None:
-    train_ds, val_ds = load_training_and_validation_data(batch_size=BATCH_SIZE)
-    test_ds = load_test_data(batch_size=TEST_BATCH_SIZE)
+    train_ds, val_ds = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, augment=AUGMENT)
+    test_ds = load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE, augment=AUGMENT)
         
     ckpt_path = CKPT_PATH
     if ckpt_path is not None:
-        ckpt_path = Path(CKPT_PATH) 
+        ckpt_path = Path(ckpt_path) 
 
     transforms = TRANSFORMS
 

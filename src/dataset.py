@@ -1,10 +1,8 @@
-"""Functions to transform and load training and test data. Some of the transformation 
-classes have been adapted from https://colab.research.google.com/drive/1K_RsM3db8bPrXsIcxV7Qv4cHJa-M2xSn"""
-
+"""Functions to transform and load training and test data."""
 import os
 import random
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Type
 from urllib import request
 from zipfile import ZipFile
 from pathlib import Path
@@ -15,6 +13,11 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+
+from src.transforms import (
+        Normalize, RandomRotationZAxis, AddRandomNoise, 
+        PointToFloatTensor, PointToLongTensor 
+)
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -27,6 +30,8 @@ class DownloadProgressBar(tqdm):
 
 class ModelNet10(Dataset):
     """Dataset class for the ModelNet10 dataset"""
+    _url = "http://3dvision.princeton.edu/projects/2014/3DShapeNets/ModelNet10.zip"
+    
     def __init__(self, 
                  root: str, 
                  download: bool = True, 
@@ -41,18 +46,25 @@ class ModelNet10(Dataset):
         self.sample = sample
         self.num_samples = num_samples
         
-        url = "http://3dvision.princeton.edu/projects/2014/3DShapeNets/ModelNet10.zip"
-        filename = url.split("/")[-1]
+        filename = self._url.split("/")[-1]
         output_path = Path(root) / filename
-        if download and not output_path.with_name(output_path.stem).resolve().exists():
-            self._download_url(url=url, output_path=output_path.resolve())
+        self._download(download, self._url, output_path)
         data_dirpath = self._extract_zip(output_path)
-
-        self._file_list = self._generate_file_list(data_dirpath)
+        self._file_list = self._generate_file_list(data_dirpath, output_path.stem)
         self.class_name_dict = self._generate_class_name_dict()
 
         self.transform = transform
         self.target_transform = target_transform
+
+    def _download(self, download: bool, url: str, output_path: Path) -> None:
+        """
+        Downloads the dataset to specified path. If dataset is not available on disk and 
+        "download" is False, raises a RuntimeError.
+        """
+        if download and not output_path.with_name(output_path.stem).resolve().exists():
+            self._download_url(url=self._url, output_path=output_path.resolve())
+        elif not download and not output_path.with_name(output_path.stem).resolve().exists():
+            raise RuntimeError(f"Dataset not found at {output_path.parent.resolve()}. Please set download=True to download the dataset.")
         
     def _download_url(self, url: str, output_path: Path) -> None:
         """Download a given URL with a progress bar."""
@@ -77,7 +89,7 @@ class ModelNet10(Dataset):
         return data_dirpath
 
 
-    def _generate_file_list(self, data_dirpath: Path, dataset_name: str = "ModelNet10") -> list[Path]:
+    def _generate_file_list(self, data_dirpath: Path, dataset_name: str) -> list[Path]:
         """Generate list of OFF files from dataset directory structure."""
         subset = "train" if self.train else "test"
         data_dirpath = data_dirpath / dataset_name
@@ -147,9 +159,14 @@ class ModelNet10(Dataset):
                 return (int(points[0]), int(points[1]), int(points[2]))
 
             with open(off_filepath, "r") as file:
-                if file.readline().strip() != "OFF":
+                firstline = file.readline()
+                if not firstline.startswith("OFF"):
                     raise RuntimeError(f"File {off_filepath} is not a valid OFF file.")
-                n_verts_str, n_faces_str = file.readline().strip().split(" ")[:2]
+                if firstline.strip() != "OFF":
+                    secondline = firstline.split("OFF")[1]
+                    n_verts_str, n_faces_str = secondline.strip().split(" ")[:2]
+                else:
+                    n_verts_str, n_faces_str = file.readline().strip().split(" ")[:2]
                 n_verts, n_faces = int(n_verts_str), int(n_faces_str)
                 return np.asarray(list(map(
                     parse_single_point, [file.readline() for _ in range(n_verts)])), dtype=np.float32), \
@@ -189,41 +206,9 @@ class ModelNet10(Dataset):
             return len(self._file_list)
         return 0
 
-class Normalize:
-    """Normalizes points in a point cloud to a sphere of unit radius."""
-    def __call__(self, points: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
-        centered_points = points - np.mean(points, axis=0)
-        normalized_points = centered_points / np.max(np.linalg.norm(centered_points, axis=1))
-        return normalized_points
-
-class RandomRotationZAxis:
-    """Rotates a point cloud by a random angle theta about the z-axis"""
-
-    def __call__(self, points: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
-        theta = random.random() * 2.0 * np.pi
-        rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
-                                    [np.sin(theta),  np.cos(theta), 0],
-                                    [           0,               0, 1]])
-        return rotation_matrix.dot(points.T).T
-
-class AddRandomNoise:
-    """Adds Gaussian noise of specified mean and standard deviation to a point cloud."""
-    def __init__(self, mean: float = 0.0, std_dev: float = 0.02) -> None:
-        self._mean = mean
-        self._std_dev = std_dev
-
-    def __call__(self, points: np.ndarray[Any, Any]) -> np.ndarray[Any, Any]:
-        return points + np.random.normal(self._mean, self._std_dev, size=points.shape)
-
-class PointToFloatTensor:
-    """Returns a floating point tensor object for a given data point."""
-    def __call__(self, points: int | float | np.ndarray[Any, Any]) -> torch.Tensor:
-        return torch.tensor(points, dtype=torch.float)
-
-class PointToLongTensor:
-    """Returns a torch.long tensor object for a given data point."""
-    def __call__(self, points: int | float | np.ndarray[Any, Any]) -> torch.Tensor:
-        return torch.tensor(points, dtype=torch.long)
+class ModelNet40(ModelNet10):
+    """Dataset class for the ModelNet40 dataset. This is a subclass of the ModelNet10 dataset."""
+    _url = "https://modelnet.cs.princeton.edu/ModelNet40.zip"
 
 def train_val_split(data: torch.utils.data.Dataset, val_frac: float, seed: int = 42) -> \
         tuple[torch.utils.data.Dataset, torch.utils.data.Dataset]:
@@ -235,9 +220,28 @@ def train_val_split(data: torch.utils.data.Dataset, val_frac: float, seed: int =
                    generator=torch.Generator().manual_seed(seed))
     return train_subset, val_subset
 
-def load_training_and_validation_data(batch_size: int, val_frac: float = 0.2, augment: bool = True,
-              num_workers: Optional[int] = None, seed: int = 42) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+DATASET_DICT = {
+            "ModelNet10": ModelNet10,
+            "ModelNet40": ModelNet40
+        }
+
+def read_dataset(dataset: str) -> Type[Dataset]:
+    """Returns the appropriate dataset class based on user input."""
+    if dataset not in DATASET_DICT:
+        raise ValueError(f"Invalid dataset type {dataset}. Must be one of {list(DATASET_DICT.keys())}")
+    return DATASET_DICT[dataset]
+
+def load_training_and_validation_data(
+        batch_size: int,
+        dataset: str = "ModelNet10",
+        val_frac: float = 0.2, 
+        augment: bool = True,
+        num_workers: Optional[int] = None, 
+        seed: int = 42) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Loads training and validation data into dataloaders and returns the dataloaders"""
+    
+    dataset_class = read_dataset(dataset)
+
     if augment:
         data_transform = transforms.Compose(
             [
@@ -254,7 +258,11 @@ def load_training_and_validation_data(batch_size: int, val_frac: float = 0.2, au
                 PointToFloatTensor()
             ]
         )
-    data = ModelNet10(root=Path.cwd(), download=True, train=True, transform=data_transform, target_transform=PointToLongTensor())
+    data = dataset_class(root=Path.cwd(), 
+                            download=True, 
+                            train=True, 
+                            transform=data_transform, 
+                            target_transform=PointToLongTensor())
 
     train, val = train_val_split(data, val_frac, seed)
 
@@ -263,9 +271,13 @@ def load_training_and_validation_data(batch_size: int, val_frac: float = 0.2, au
     return DataLoader(train, batch_size=batch_size, num_workers=num_workers), \
     DataLoader(val, batch_size=batch_size, num_workers=num_workers)
 
-def load_test_data(batch_size: int, augment: bool = True,
-              num_workers: Optional[int] = None) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+def load_test_data(batch_size: int, 
+                   dataset: str = "ModelNet10", 
+                   augment: bool = True,
+                   num_workers: Optional[int] = None) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Loads training data into a dataloader and returns the dataloader"""
+    dataset_class = read_dataset(dataset)
+    
     if augment:
         data_transform = transforms.Compose(
             [
@@ -282,7 +294,12 @@ def load_test_data(batch_size: int, augment: bool = True,
                 PointToFloatTensor()
             ]
         )
-    data = ModelNet10(root=Path.cwd(), download=True, train=False, transform=data_transform, target_transform=PointToLongTensor())
+    data = dataset_class(
+            root=Path.cwd(), 
+            download=True, 
+            train=False, 
+            transform=data_transform, 
+            target_transform=PointToLongTensor())
 
     num_workers = os.cpu_count() - 1 if not num_workers else num_workers
  

@@ -95,6 +95,7 @@ class PointNetClassifier(pl.LightningModule):
                  scheduler_gamma: float = 0.5,
                  dropout_p: float = 0.7) -> None:
         super().__init__()
+        print(self.hparams)
         self.save_hyperparameters(ignore=["loss_fn", "input_transform", "feature_transform"])
 
         self.loss_fn = loss_fn
@@ -122,34 +123,34 @@ class PointNetClassifier(pl.LightningModule):
                     Linear(global_feature_mlp_out_ftrs[1], num_classes),
                 )
 
-    def forward(self, input_tensor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        transformed_input, t_net_out_3by3 = self.input_transform(input_tensor)
+    def forward(self, input_tensor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        transformed_input, _ = self.input_transform(input_tensor)
         feature_tensor = self.input_feature_mlp(transformed_input)
         transformed_features, t_net_out_64by64 = self.feature_transform(feature_tensor)
         global_features_tensor = self.maxpool(self.feature_mlp(transformed_features))
-        return self.global_feature_mlp(self.flatten(global_features_tensor)),\
-                t_net_out_3by3, t_net_out_64by64
+        return self.global_feature_mlp(self.flatten(global_features_tensor)), t_net_out_64by64
+                
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.tensor:
         points, targets = batch
-        preds, t_net_out_3by3, t_net_out_64by64 = self.forward(points)
+        preds, t_net_out_64by64 = self.forward(points)
         loss = self.loss_fn(preds, targets)
-        loss += self.regularization_term(t_net_out_3by3, t_net_out_64by64)
+        loss += self.regularization_term(t_net_out_64by64)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
         points, targets = batch
-        preds, t_net_out_3by3, t_net_out_64by64 = self.forward(points)
+        preds, t_net_out_64by64 = self.forward(points)
         loss = self.loss_fn(preds, targets)
-        loss += self.regularization_term(t_net_out_3by3, t_net_out_64by64)
+        loss += self.regularization_term(t_net_out_64by64)
         accuracy = self.get_accuracy(preds, targets)
         self.log_dict(dict(val_loss = loss, val_acc = accuracy))
         return loss
 
     def test_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
         points, targets = batch
-        preds, t_net_out_3by3, t_net_out_64by64 = self.forward(points)
+        preds, t_net_out_64by64 = self.forward(points)
         accuracy = self.get_accuracy(preds, targets)
         self.log("test_acc", accuracy)
         return accuracy
@@ -166,19 +167,21 @@ class PointNetClassifier(pl.LightningModule):
                                     lr=self.hparams.learning_rate,
                                     betas=(self.hparams.beta1, self.hparams.beta2)
                                 )
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.hparams.scheduler_stepsize, gamma=self.hparams.scheduler_gamma)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 
+                                                    step_size=self.hparams.scheduler_stepsize, 
+                                                    gamma=self.hparams.scheduler_gamma)
         return [optimizer], [scheduler]
 
-    def regularization_term(self, t_net_out_3by3: torch.Tensor, t_net_out_64by64: torch.Tensor) -> torch.Tensor:
+    def regularization_term(self, t_net_out_64by64: torch.Tensor) -> torch.Tensor:
         """Returns the regularization term to be added to the softmax loss."""
-        def calc_regularization_term(t_net_out_3by3: torch.Tensor) -> torch.Tensor:
-            identity_mat = (torch.eye(n=t_net_out_3by3.size(1), device=t_net_out_3by3.device)
-                            .view(1, t_net_out_3by3.size(1), t_net_out_3by3.size(1))
-                            .repeat(t_net_out_3by3.size(0), 1, 1)) 
-            diff = identity_mat - torch.matmul(t_net_out_3by3, torch.transpose(t_net_out_3by3, dim0=1, dim1=2))
+        def calc_regularization_term(t_net_out: torch.Tensor) -> torch.Tensor:
+            identity_mat = (torch.eye(n=t_net_out.size(1), device=t_net_out.device)
+                            .view(1, t_net_out.size(1), t_net_out.size(1))
+                            .repeat(t_net_out.size(0), 1, 1)) 
+            diff = identity_mat - torch.matmul(t_net_out, torch.transpose(t_net_out, dim0=1, dim1=2))
             return torch.mean(torch.square(torch.linalg.matrix_norm(diff)))
 
-        return self.hparams.regularization_weight * (calc_regularization_term(t_net_out_3by3) + calc_regularization_term(t_net_out_64by64))
+        return self.hparams.regularization_weight * calc_regularization_term(t_net_out_64by64)
 
 class PointNetClassifierNoTransforms(pl.LightningModule):
     """Pytorch Lightning Module for PointNet classifier training without transforms."""
