@@ -31,7 +31,7 @@ class ModelNet10(Dataset):
                  root: str, 
                  download: bool = True, 
                  train: bool = True,
-                 transform: Optional[Callable[[np.ndarray[Any, Any] | torch.Tensor], torch.Tensor]] = None,
+                 transform: Optional[Callable[[np.ndarray[Any, Any]], np.ndarray[Any, Any] | torch.Tensor]] = None,
                  target_transform: Optional[Callable[[np.ndarray[Any, Any] | torch.Tensor], torch.Tensor]] = None,
                  sample: Optional[bool] = True,
                  num_samples: int = 1024) -> None:
@@ -131,7 +131,9 @@ class ModelNet10(Dataset):
 
         return sampled_points
 
-    def __getitem__(self, idx: int | list[int] | torch.Tensor) -> torch.Tensor:
+    def __getitem__(self, idx: int | list[int] | torch.Tensor) ->\
+            list[tuple[torch.Tensor | np.ndarray[Any, Any], int | torch.Tensor]] | \
+            tuple[torch.Tensor | np.ndarray[Any, Any], int | torch.Tensor]:
         def parse_off_points(off_filepath: Path) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
             """Parses 3-D coordinates and points in triangular faces from an OFF (Object File Format) file into numpy arrays."""
             def parse_single_point(line: str) -> tuple[float, float, float]:

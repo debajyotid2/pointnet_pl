@@ -1,7 +1,7 @@
 from pathlib import Path
 import pytorch_lightning as pl
 import torch
-from src.model import TransformationNetwork, PointNetClassifier
+from src.model import TransformationNetwork, PointNetClassifier, PointNetClassifierNoTransforms
 from src.dataset import load_training_and_validation_data, load_test_data
 
 NUM_CLASSES = 10
@@ -14,6 +14,7 @@ DROPOUT_P = 0.7
 BATCH_SIZE = 32
 TEST_BATCH_SIZE = 128
 MAX_EPOCHS = 300
+TRANSFORMS = False
 
 PL_WORKING_DIR = Path(".").resolve()
 CKPT_PATH = None
@@ -26,24 +27,39 @@ def main() -> None:
     if ckpt_path is not None:
         ckpt_path = Path(CKPT_PATH) 
 
+    transforms = TRANSFORMS
+
     input_shape = next(iter(train_ds))[0].shape[1:]
     
     loss_fn = torch.nn.functional.cross_entropy
-
-    classifier = PointNetClassifier(
-                input_transform=TransformationNetwork(input_shape, 3, 3),
-                feature_transform=TransformationNetwork(input_shape, 64, 64),
-                loss_fn=loss_fn,
-                input_shape=input_shape,
-                num_classes=NUM_CLASSES,
-                feature_mlp_out_ftrs=FEATURE_MLP_OUT_FTRS,
-                global_feature_mlp_out_ftrs=GLOBAL_FEATURE_MLP_OUT_FTRS,
-                learning_rate=LEARNING_RATE,
-                beta1=BETA1,
-                beta2=BETA2,
-                dropout_p=DROPOUT_P
-            )
     
+    if transforms:
+        classifier = PointNetClassifier(
+                    input_transform=TransformationNetwork(input_shape, 3, 3),
+                    feature_transform=TransformationNetwork(input_shape, 64, 64),
+                    loss_fn=loss_fn,
+                    input_shape=input_shape,
+                    num_classes=NUM_CLASSES,
+                    feature_mlp_out_ftrs=FEATURE_MLP_OUT_FTRS,
+                    global_feature_mlp_out_ftrs=GLOBAL_FEATURE_MLP_OUT_FTRS,
+                    learning_rate=LEARNING_RATE,
+                    beta1=BETA1,
+                    beta2=BETA2,
+                    dropout_p=DROPOUT_P
+                )
+    else:
+        classifier = PointNetClassifierNoTransforms(
+                    loss_fn=loss_fn,
+                    input_shape=input_shape,
+                    num_classes=NUM_CLASSES,
+                    feature_mlp_out_ftrs=FEATURE_MLP_OUT_FTRS,
+                    global_feature_mlp_out_ftrs=GLOBAL_FEATURE_MLP_OUT_FTRS,
+                    learning_rate=LEARNING_RATE,
+                    beta1=BETA1,
+                    beta2=BETA2,
+                    dropout_p=DROPOUT_P
+                )
+
     checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor="val_loss")
     trainer = pl.Trainer(default_root_dir=PL_WORKING_DIR,
                          accelerator="gpu" if torch.cuda.is_available() else "cpu",
