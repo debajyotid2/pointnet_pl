@@ -7,7 +7,7 @@ from torch.nn import (
             Sequential, BatchNorm1d, MaxPool1d,
             Dropout, Conv1d, Flatten
         )
-from typing import Callable
+from typing import Any, Callable
 
 
 class Transpose(Module):
@@ -162,7 +162,7 @@ class PointNetClassifier(pl.LightningModule):
         accuracy = torch.sum(correct.cpu().apply_(lambda x: 1.0 if x else 0.0), dim=0) / targets.size(0)
         return accuracy
 
-    def configure_optimizers(self) -> torch.optim.Optimizer:
+    def configure_optimizers(self) -> tuple[list[torch.optim.Optimizer], list[Any]]:
         optimizer = torch.optim.Adam(params = self.parameters(),
                                     lr=self.hparams.learning_rate,
                                     betas=(self.hparams.beta1, self.hparams.beta2)
@@ -194,7 +194,6 @@ class PointNetClassifierNoTransforms(pl.LightningModule):
                  learning_rate: float = 1e-3,
                  beta1: float = 0.9,
                  beta2: float = 0.999,
-                 regularization_weight: float = 0.0001,
                  scheduler_stepsize: int = 20,
                  scheduler_gamma: float = 0.5,
                  dropout_p: float = 0.7) -> None:
@@ -258,7 +257,7 @@ class PointNetClassifierNoTransforms(pl.LightningModule):
         accuracy = torch.sum(correct.cpu().apply_(lambda x: 1.0 if x else 0.0), dim=0) / targets.size(0)
         return accuracy
 
-    def configure_optimizers(self) -> torch.optim.Optimizer:
+    def configure_optimizers(self) -> tuple[list[torch.optim.Optimizer], list[Any]]:
         optimizer = torch.optim.Adam(params = self.parameters(),
                                     lr=self.hparams.learning_rate,
                                     betas=(self.hparams.beta1, self.hparams.beta2)

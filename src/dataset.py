@@ -148,31 +148,23 @@ class ModelNet10(Dataset):
             tuple[torch.Tensor | np.ndarray[Any, Any], int | torch.Tensor]:
         def parse_off_points(off_filepath: Path) -> tuple[np.ndarray[Any, Any], np.ndarray[Any, Any]]:
             """Parses 3-D coordinates and points in triangular faces from an OFF (Object File Format) file into numpy arrays."""
-            def parse_single_point(line: str) -> tuple[float, float, float]:
-                """Parse coordinates of a single vertex from a line of the OFF file."""
-                coords = line.strip().split(" ")
-                return (float(coords[0]), float(coords[1]), float(coords[2]))
+            skiprows = 0
             
-            def parse_single_face(line: str) -> tuple[int, int, int]:
-                """Parse vertice of a single face from a line of the OFF file."""
-                points = line.strip().split(" ")
-                return (int(points[0]), int(points[1]), int(points[2]))
-
-            with open(off_filepath, "r") as file:
-                firstline = file.readline()
-                if not firstline.startswith("OFF"):
-                    raise RuntimeError(f"File {off_filepath} is not a valid OFF file.")
-                if firstline.strip() != "OFF":
-                    secondline = firstline.split("OFF")[1]
-                    n_verts_str, n_faces_str = secondline.strip().split(" ")[:2]
-                else:
-                    n_verts_str, n_faces_str = file.readline().strip().split(" ")[:2]
-                n_verts, n_faces = int(n_verts_str), int(n_faces_str)
-                return np.asarray(list(map(
-                    parse_single_point, [file.readline() for _ in range(n_verts)])), dtype=np.float32), \
-                        np.asarray(list(map(
-                    parse_single_face, [file.readline() for _ in range(n_faces)])), dtype=np.int32)
-
+            firstline = np.loadtxt(off_filepath, delimiter=",", dtype=np.str_, max_rows=1).item()
+            
+            if not firstline.startswith("OFF"):
+                raise RuntimeError(f"File {off_filepath} is not a valid OFF file.")
+            if firstline.strip() != "OFF":
+                secondline = firstline.split("OFF")[1]
+                n_verts_str, n_faces_str = secondline.strip().split(" ")[:2]
+                skiprows = 1
+            else:
+                n_verts_str, n_faces_str, _ = np.loadtxt(off_filepath, dtype=np.int32, skiprows = 1, max_rows = 1)
+                skiprows = 2
+            n_verts, n_faces = int(n_verts_str), int(n_faces_str)
+            return np.loadtxt(off_filepath, dtype=np.float32, skiprows=skiprows, max_rows=n_verts), \
+                np.loadtxt(off_filepath, dtype=np.int32, skiprows=skiprows+n_verts, max_rows=n_faces)
+     
         def get_class(file_path: Path) -> str:
             """Returns the class of an OFF file belonging to the dataset."""
             return file_path.parents[1].name
@@ -207,7 +199,7 @@ class ModelNet10(Dataset):
         return 0
 
 class ModelNet40(ModelNet10):
-    """Dataset class for the ModelNet40 dataset. This is a subclass of the ModelNet10 dataset."""
+    """Dataset class for the ModelNet40 dataset."""
     _url = "https://modelnet.cs.princeton.edu/ModelNet40.zip"
 
 def train_val_split(data: torch.utils.data.Dataset, val_frac: float, seed: int = 42) -> \
@@ -273,22 +265,11 @@ def load_training_and_validation_data(
 
 def load_test_data(batch_size: int, 
                    dataset: str = "ModelNet10", 
-                   augment: bool = True,
                    num_workers: Optional[int] = None) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Loads training data into a dataloader and returns the dataloader"""
     dataset_class = read_dataset(dataset)
     
-    if augment:
-        data_transform = transforms.Compose(
-            [
-                AddRandomNoise(),
-                RandomRotationZAxis(),
-                Normalize(),
-                PointToFloatTensor()
-            ]
-        )
-    else:
-        data_transform = transforms.Compose(
+    data_transform = transforms.Compose(
             [
                 Normalize(),
                 PointToFloatTensor()

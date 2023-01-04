@@ -14,6 +14,7 @@ NUM_CLASSES = 40
 FEATURE_MLP_OUT_FTRS = [64, 128, 1024]
 GLOBAL_FEATURE_MLP_OUT_FTRS = [64, 128, 1024]
 LEARNING_RATE = 1e-3
+REGULARIZATION_WEIGHT = 1e-3
 BETA1 = 0.9
 BETA2 = 0.999
 DROPOUT_P = 0.7
@@ -27,14 +28,16 @@ AUGMENT = True
 PL_WORKING_DIR = Path(".").resolve()
 CKPT_PATH = None
 
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-torch.cuda.manual_seed_all(SEED)
 
 def main() -> None:
+    
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+
     train_ds, val_ds = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, augment=AUGMENT)
-    test_ds = load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE, augment=AUGMENT)
+    test_ds = load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE)
         
     ckpt_path = CKPT_PATH
     if ckpt_path is not None:
@@ -58,6 +61,7 @@ def main() -> None:
                     learning_rate=LEARNING_RATE,
                     beta1=BETA1,
                     beta2=BETA2,
+                    regularization_weight=REGULARIZATION_WEIGHT,
                     dropout_p=DROPOUT_P
                 )
     else:
@@ -74,7 +78,9 @@ def main() -> None:
                 )
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor="val_loss")
-    trainer = pl.Trainer(default_root_dir=PL_WORKING_DIR,
+    trainer = pl.Trainer(
+                         profiler="simple",   
+                         default_root_dir=PL_WORKING_DIR,
                          accelerator="gpu" if torch.cuda.is_available() else "cpu",
                          devices=1,
                          max_epochs=MAX_EPOCHS,
