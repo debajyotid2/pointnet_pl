@@ -18,7 +18,7 @@ REGULARIZATION_WEIGHT = 1e-3
 BETA1 = 0.9
 BETA2 = 0.999
 DROPOUT_P = 0.7
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 TEST_BATCH_SIZE = 128
 MAX_EPOCHS = 1
 TRANSFORMS = True
@@ -36,9 +36,12 @@ def main() -> None:
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
 
-    train_ds, val_ds = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, augment=AUGMENT)
-    test_ds = load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE)
-        
+    # train_ds, val_ds = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, augment=AUGMENT)
+    # test_ds = load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE)
+    train_ds, _ = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, val_frac=0.0, augment=AUGMENT)
+    val_ds = load_test_data(dataset=DATASET, batch_size=BATCH_SIZE)
+    test_ds = val_ds
+   
     ckpt_path = CKPT_PATH
     if ckpt_path is not None:
         ckpt_path = Path(ckpt_path) 
@@ -79,7 +82,6 @@ def main() -> None:
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor="val_loss")
     trainer = pl.Trainer(
-                         profiler="simple",   
                          default_root_dir=PL_WORKING_DIR,
                          accelerator="gpu" if torch.cuda.is_available() else "cpu",
                          devices=1,
