@@ -239,6 +239,8 @@ class ModelNet10(Dataset):
         points = list(map(load_saved_npz_point, points_paths))
         targets = list(map(get_class, points_paths))
         
+        rng = np.random.default_rng()
+        points = [rng.choice(point, size=self.num_samples, replace=False) for point in points]
 
         data = [(point, self.class_name_dict[target]) for point, target in zip(points, targets)]
 
@@ -349,5 +351,7 @@ def load_test_data(batch_size: int,
 
 if __name__ == "__main__":
    train_ds, val_ds = load_training_and_validation_data(batch_size=3, dataset="ModelNet40")
-   print(next(iter(train_ds)))
-   print(next(iter(val_ds)))
+   train_points, train_labels = next(iter(train_ds))
+   val_points, val_labels = next(iter(val_ds))
+   print(train_points.shape, train_labels.shape)
+   print(val_points.shape, val_labels.shape)

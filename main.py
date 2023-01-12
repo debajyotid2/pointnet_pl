@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 import torch
 
 from src.model import TransformationNetwork, PointNetClassifier, PointNetClassifierNoTransforms
-from src.dataset import load_training_and_validation_data, load_test_data
+from src import dataset, h5_dataset
 
 DATASET = "ModelNet40"
 NUM_CLASSES = 40
@@ -20,14 +20,14 @@ BETA2 = 0.999
 DROPOUT_P = 0.7
 BATCH_SIZE = 16
 TEST_BATCH_SIZE = 128
-MAX_EPOCHS = 1
+MAX_EPOCHS = 250
 TRANSFORMS = True
 SEED = 42
 AUGMENT = True
 
 PL_WORKING_DIR = Path(".").resolve()
 CKPT_PATH = None
-
+H5_DATA_DIRPATH = "./modelnet40_ply_hdf5_2048"
 
 def main() -> None:
     
@@ -36,10 +36,10 @@ def main() -> None:
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
 
-    # train_ds, val_ds = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, augment=AUGMENT)
-    # test_ds = load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE)
-    train_ds, _ = load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, val_frac=0.0, augment=AUGMENT)
-    val_ds = load_test_data(dataset=DATASET, batch_size=BATCH_SIZE)
+    # train_ds, val_ds = dataset.load_training_and_validation_data(dataset=DATASET, batch_size=BATCH_SIZE, augment=AUGMENT)
+    # test_ds = dataset.load_test_data(dataset=DATASET, batch_size=TEST_BATCH_SIZE)
+    train_ds, _, _ = h5_dataset.load_training_and_validation_data(data_dirpath=H5_DATA_DIRPATH, batch_size=BATCH_SIZE, val_frac=0.0, augment=AUGMENT)
+    val_ds = h5_dataset.load_test_data(data_dirpath=H5_DATA_DIRPATH, batch_size=BATCH_SIZE)
     test_ds = val_ds
    
     ckpt_path = CKPT_PATH
