@@ -1,0 +1,26 @@
+defaults:
+  - _self_
+
+paths:
+  pl_working_dir: ${hydra:runtime.cwd}
+  ckpt_path: null
+
+model:
+  feature_mlp_out_ftrs : [64, 128, 1024]
+  global_feature_mlp_out_ftrs : [64, 128, 1024]
+  dropout_p : 0.7
+  max_epochs : 1
+  transforms : True
+  seed : 42
+
+optimizer:
+  learning_rate : 1e-3
+  beta1 : 0.9
+  beta2 : 0.999
+
+data:
+  dataset : "ModelNet40"
+  num_classes : 40
+  batch_size : 32
+  test_batch_size : 128
+  augment : True
